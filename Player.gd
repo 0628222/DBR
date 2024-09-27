@@ -11,35 +11,13 @@ enum DynamicCameraViewToggleAction {
 }
 
 # First Player View (FPP)
-@onready var fpp_camera: Camera3D = $FPPCamera
-@onready var fpp_raycast: RayCast3D = $FPPCamera/FPPRayCast3D
-
-@onready var fpp_pistol: Node3D = $FPPCamera/FPPPistol
-@onready var fpp_ak47: Node3D = $FPPCamera/FPPAK47
-@onready var fpp_knife: Node3D = $FPPCamera/FPPKnife
-
-@onready var fpp_pistol_muzzle_flash: GPUParticles3D = $FPPCamera/FPPPistol/MuzzleFlash
-@onready var fpp_ak47_muzzle_flash: GPUParticles3D = $FPPCamera/FPPAK47/MuzzleFlash
-
-# Third Player View (TPP)
-@onready var tpp_camera: Camera3D = $TPPCamera
-@onready var tpp_raycast: RayCast3D = $TPPCamera/TPPRayCast3D
-
-@onready var tpp_pistol: Node3D = $TPPCamera/TPPPistol
-@onready var tpp_ak47: Node3D = $TPPCamera/TPPAK47
-@onready var tpp_knife: Node3D = $TPPCamera/TPPKnife
-
-@onready var tpp_pistol_muzzle_flash: GPUParticles3D = $TPPCamera/TPPPistol/MuzzleFlash
-@onready var tpp_ak47_muzzle_flash: GPUParticles3D = $TPPCamera/TPPAK47/MuzzleFlash
 
 # Animations
 @onready var anim_player: AnimationPlayer = $AnimationPlayer
-
-# Teleport
-@onready var teleport_point: Node3D = $FPPCamera/TelePoint
+@onready var fpp_camera: Camera3D = $FPPCamera
+@onready var fpp_raycast: RayCast3D = $FPPCamera/FPPRayCast3D
 
 # Set player's current camera view state in the editor
-@export var camera_player_state: DynamicCameraViewToggleAction = DynamicCameraViewToggleAction.FIRST_PERSON_VIEW
 
 # Set positon for the camera when zoomed in or out
 @export var zoom_in_position: Vector3 = Vector3(0, 3, -8)
@@ -63,14 +41,11 @@ const JUMP_VELOCITY: float = 10.0
 # Get the gravity from the project settings to be synced with RigidBody nodes.
 var gravity: float = 25.0
 
-# Track different state of camera node to toggle either FPP or TPP.
-var is_fpp: bool = true
 
 # Track the current weapon
 var current_weapon: String = ""
 
-# Set the coordination value that teleportation feature will use to make it happens
-var teleport_final_destination: Vector3
+
 
 func _enter_tree():
 	set_multiplayer_authority(str(name).to_int())
@@ -86,25 +61,20 @@ func _ready():
 	
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	
-	# Initialize camera and gun visibility based on the editor setting
-	update_camera_visibility()
-	update_weapon_model_visibility()
-
 
 func _unhandled_input(event):
 	if not is_multiplayer_authority(): return
-
+	
 	if event is InputEventMouseMotion:
-		# FPP camera
-		if is_fpp:
-			rotate_y(-event.relative.x * .005)
-			fpp_camera.rotate_x(-event.relative.y * .005)
-			fpp_camera.rotation.x = clamp(fpp_camera.rotation.x, -PI/2, PI/2)
-		# TPP camera
-		else:
-			rotate_y(-event.relative.x * .005)
-			tpp_camera.rotate_x(-event.relative.y * .005)
-			tpp_camera.rotation.x = clamp(tpp_camera.rotation.x, -PI/2, PI/2)
+		rotate_y(-event.relative.x * .005)
+		fpp_camera.rotate_x(-event.relative.y * .005)
+		fpp_camera.rotation.x = clamp(rotation.x, -PI/2, PI/2)
+# potential lean mechanic?
+#			if event is InputEventMouseMotion:
+#		rotate_y(-event.relative.x * .005)
+#		rotate_x(-event.relative.y * .005)
+#		rotation.x = clamp(rotation.x, -PI/2, PI/2)
+
 
 	if Input.is_action_just_pressed("shoot"):
 		#print("shoot")
@@ -118,14 +88,8 @@ func _unhandled_input(event):
 		ammo_Changed.emit(current_ammo)
 		if is_reloading:
 			pass
-		play_shoot_effects.rpc()
-		if is_fpp and fpp_raycast.is_colliding():
-			var hit_player = fpp_raycast.get_collider()
-			hit_player.receive_damage.rpc_id(hit_player.get_multiplayer_authority())
+		#play_shoot_effects.rpc()
 
-		elif not is_fpp and tpp_raycast.is_colliding():
-			var hit_player = tpp_raycast.get_collider()
-			hit_player.receive_damage.rpc_id(hit_player.get_multiplayer_authority())
 
 var _is_reloading = false
 func reload():
@@ -219,118 +183,15 @@ func _input(event):
 		Global.switch_weapon(3)
 
 # Switch player's camera view according to the key inputs set for it
-	if event.is_action_pressed("dynamic_camera_view"):
-		toggle_different_camera_state();
+
 
 # Reload weapon's ammo according to the key inputs set for it 
 	if event.is_action_pressed("reload"):
 		reload()
 
-# Change player's camera positon according to the key inputs set for it 
-	if event.is_action_pressed("zoom"):
-		if is_multiplayer_authority():
-			#print("Zoom key clicked")
-			fpp_camera.position = zoom_in_position
-			
-			# Hide weapon models when zoomed in based on what view mode is choosen
-			if is_fpp:
-				match current_weapon:
-					"Glock-19":
-						fpp_pistol.visible = false
-					"AK-47":
-						fpp_ak47.visible = false
-					"Knife":
-						fpp_knife.visible = false
-		
-			## Just leave it here 'cause we don't do zoom in in TPP. Might need in future anyways.
-			#else:
-				#match current_weapon:
-					#"Glock-19":
-						#tpp_pistol.visible = false
-					#"AK-47":
-						#tpp_ak47.visible = false
-					#"Knife":
-						#tpp_knife.visible = false
-			
-	elif event.is_action_released("zoom"):
-		if is_multiplayer_authority():
-			#print("Zoom key released")
-			fpp_camera.position = zoom_out_position
-			
-			# Show weapon models when zoomed out based on what view mode is choosen	
-			if is_fpp:
-				match current_weapon:
-					"Glock-19":
-						fpp_pistol.visible = true
-					"AK-47":
-						fpp_ak47.visible = true
-					"Knife":
-						fpp_knife.visible = true
-		
-			## Just leave it here 'cause we don't do zoom out in TPP. Might need in future anyways.
-			#else:
-				#match current_weapon:
-					#"Glock-19":
-						#tpp_pistol.visible = true
-					#"AK-47":
-						#tpp_ak47.visible = true
-					#"Knife":
-						#tpp_knife.visible = true
-	
-	if event.is_action_pressed("teleport"):
-		if is_multiplayer_authority():
-			if is_fpp:
-				#print("Teleport button worked!")
-				teleport_point.visible = true
-
-				# Perform a raycast to find the teleportation destination
-				if fpp_raycast.is_colliding():
-					# Set the teleportation destination to the hit position
-					teleport_final_destination = fpp_raycast.get_collision_point()
-					print("Raycast hit position: ", fpp_raycast.get_collision_point())
-
-					# Move the teleportation destination model to the hit position
-					teleport_point.global_position = teleport_final_destination				
-					print("Teleport destination: ", teleport_final_destination)
-				
-			else:
-				print("You are not allowed to do this in TPP!")
-
-	elif event.is_action_released("teleport"):
-		if is_multiplayer_authority():
-			if is_fpp:
-				#print("Teleport button got released!")
-				teleport_point.visible = false
-		
-				# Call the teleportation function with the destination position
-				teleport_to_position(teleport_final_destination)
-				print("Current player position: ", teleport_to_position(teleport_final_destination))
-			
-			else:
-				# Block the feature to run in TPP view mode
-				print("You are not allowed to do this in TPP!")
-
-
-@rpc("call_local")
 func play_shoot_effects():
 	anim_player.stop()
 	anim_player.play("shoot")
-	if is_fpp:
-		if current_weapon == "Glock-19":
-			fpp_pistol_muzzle_flash.restart()
-			fpp_pistol_muzzle_flash.emitting = true
-		elif current_weapon == "AK-47":
-			fpp_ak47_muzzle_flash.restart()
-			fpp_ak47_muzzle_flash.emitting = true
-	else:
-		if current_weapon == "Glock-19":
-			tpp_pistol_muzzle_flash.restart()
-			tpp_pistol_muzzle_flash.emitting = true
-		elif current_weapon == "AK-47":
-			tpp_ak47_muzzle_flash.restart()
-			tpp_ak47_muzzle_flash.emitting = true
-
-
 @rpc("any_peer")
 func receive_damage():
 	health -= 1
@@ -375,35 +236,15 @@ func _on_weapon_switched(weapon_name):
 	print("Switched to weapon: %s" % weapon_name)
 	current_weapon = weapon_name
 	weaponStatus = weapon_name
-	update_weapon_model_visibility()
 
-
-# Handle diffrent state of player's camera view
-func toggle_different_camera_state():
-	is_fpp = not is_fpp
-	update_camera_visibility()
-	update_weapon_model_visibility()
 
 
 # Update player's camera view when player pressed the pre-defined key input
-func update_camera_visibility():
-	if is_multiplayer_authority():
-		fpp_camera.current = is_fpp
-		tpp_camera.current = not is_fpp
-
 
 # Default and reduced range values
 var default_range = -50.0
 var knife_range = -2.0
 
-func _process(delta):
-	if weaponStatus == 'Knife':
-		fpp_raycast.target_position = Vector3(0, 0, knife_range)
-	else:
-		fpp_raycast.target_position = Vector3(0, 0, default_range)
-	
-	# Update the raycast to apply the new range
-	fpp_raycast.force_raycast_update()
 
 ##################################################################################################################
 ######      Documentation about synchronising weapon models into multiplayer game in a correct way          ######
@@ -448,48 +289,6 @@ func _process(delta):
 
 
 # Update the visibility of guns when player changed the camera view based on their preferrance
-func update_weapon_model_visibility():
-	#print("Updating weapon model visibility")
-
-	# Hide all weapon models
-	fpp_pistol.visible = false
-	fpp_ak47.visible = false
-	fpp_knife.visible = false
-	tpp_pistol.visible = false
-	tpp_ak47.visible = false
-	tpp_knife.visible = false
-
-	# Show the weapon model that corresponds to the currently selected weapon and is owned by the current player
-	if is_multiplayer_authority():
-		match current_weapon:
-			"Glock-19":
-				if is_fpp:
-					fpp_pistol.visible = true
-				else:
-					tpp_pistol.visible = true
-			"AK-47":
-				if is_fpp:
-					fpp_ak47.visible = true
-				else:
-					tpp_ak47.visible = true
-			"Knife":
-				if is_fpp:
-					fpp_knife.visible = true
-				else:
-					tpp_knife.visible = true
-
-	#print("FPP Pistol Visible: ", fpp_pistol.visible)
-	#print("FPP AK47 Visible: ", fpp_ak47.visible)
-	#print("FPP Knife Visible: ", fpp_knife.visible)
-#
-	#print("TPP Pistol Visible: ", tpp_pistol.visible)
-	#print("TPP AK47 Visible: ", tpp_ak47.visible)
-	#print("TPP Knife Visible: ", tpp_knife.visible)
 
 
-func teleport_to_position(final_destination_position):
-	# Set the player's position to the destination position
-	position = final_destination_position
 
-	# Hide the teleportation destination model
-	teleport_point.visible = false
