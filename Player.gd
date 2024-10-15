@@ -4,19 +4,14 @@ signal health_changed(health_value)
 signal ammo_changed(spare_ammo)
 signal ammo_Changed(current_ammo)
 
-# Set enumuration values reflect player's current camera view state
-enum DynamicCameraViewToggleAction {
-	FIRST_PERSON_VIEW,
-	THIRD_PERSON_VIEW
-}
-
-# First Player View (FPP)
-
 # Animations
 @onready var anim_player: AnimationPlayer = $AnimationPlayer
-@onready var fpp_camera: Camera3D = $FPPCamera
-@onready var fpp_raycast: RayCast3D = $FPPCamera/FPPRayCast3D
+@onready var camera: Camera3D = $Camera
+@onready var raycast: RayCast3D = $Camera/RayCast3D
 
+@onready var pistol: Node3D = $Camera/Pistol
+@onready var ak47: Node3D = $Camera/AK47
+@onready var knife: Node3D = $Camera/Knife
 # Set player's current camera view state in the editor
 
 # Set positon for the camera when zoomed in or out
@@ -67,8 +62,8 @@ func _unhandled_input(event):
 	
 	if event is InputEventMouseMotion:
 		rotate_y(-event.relative.x * .005)
-		fpp_camera.rotate_x(-event.relative.y * .005)
-		fpp_camera.rotation.x = clamp(rotation.x, -PI/2, PI/2)
+		camera.rotate_x(-event.relative.y * .005)
+		camera.rotation.x = clamp(rotation.x, -PI/2, PI/2)
 # potential lean mechanic?
 #			if event is InputEventMouseMotion:
 #		rotate_y(-event.relative.x * .005)
@@ -236,7 +231,26 @@ func _on_weapon_switched(weapon_name):
 	print("Switched to weapon: %s" % weapon_name)
 	current_weapon = weapon_name
 	weaponStatus = weapon_name
+	update_weapon_model_visibility()
 
+func update_weapon_model_visibility():
+	#print("Updating weapon model visibility")
+
+	# Hide all weapon models
+	pistol.visible = false
+	ak47.visible = false
+	knife.visible = false
+
+
+	# Show the weapon model that corresponds to the currently selected weapon and is owned by the current player
+	if is_multiplayer_authority():
+		match current_weapon:
+			"Glock-19":
+				pistol.visible = true
+			"AK-47":
+				ak47.visible = true
+			"Knife":
+				knife.visible = true
 
 
 # Update player's camera view when player pressed the pre-defined key input
